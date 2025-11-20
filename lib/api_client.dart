@@ -103,7 +103,12 @@ class ApiClient {
       uri = uri.replace(queryParameters: queryParameters);
     }
 
-    return client.get(uri);
+    return client.get(uri).timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        throw Exception('Connection timeout');
+      },
+    );
   }
  
 
