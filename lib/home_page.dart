@@ -12,6 +12,8 @@ import 'package:task_manager_app/conversations_page.dart';
 import 'package:task_manager_app/map_page.dart';
 import 'package:task_manager_app/notification_service.dart';
 import 'package:task_manager_app/socket_service.dart';
+import 'package:task_manager_app/account_settings_page.dart';
+import 'package:task_manager_app/workspaces_page.dart';
 
 class HomePage extends StatefulWidget {
   final String username;
@@ -127,6 +129,12 @@ class _HomePageState extends State<HomePage> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.settings, color: Colors.red),
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountSettingsPage()));
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.logout, color: Colors.red),
             onPressed: _handleLogout,
           ),
@@ -150,6 +158,9 @@ class _HomePageState extends State<HomePage> {
                         if (_userId != null) {
                            Navigator.push(context, MaterialPageRoute(builder: (_) => ConversationsPage(currentUserId: _userId!)));
                         }
+                      }),
+                      _buildNavButton(Icons.group, 'Grupuri', () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => WorkspacesPage(currentUsername: widget.username)));
                       }),
                       _buildNavButton(Icons.map, 'Harta', () {
                         Navigator.push(context, MaterialPageRoute(builder: (_) => const MapPage()));
