@@ -11,12 +11,14 @@ class ChatPage extends StatefulWidget {
   final String currentUserId;
   final String receiverId;
   final String receiverName;
+  final bool isWorkspace;
 
   const ChatPage({
     super.key,
     required this.currentUserId,
     required this.receiverId,
     required this.receiverName,
+    this.isWorkspace = false,
   });
 
   @override
@@ -90,7 +92,30 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _loadMessageHistory() async {
     try {
-      final response = await _apiClient.get('/messages/direct/${widget.receiverId}');
+      // Determine endpoint based on context (direct or workspace)
+      // We need to know if this is a workspace chat.
+      // Currently ChatPage is designed for direct messages (receiverId, receiverName).
+      // We should add a `workspaceId` parameter or similar.
+      // But wait, ChatPage constructor signature:
+      // final String currentUserId;
+      // final String receiverId;
+      // final String receiverName;
+      
+      // If receiverId is a workspaceId, we use workspace endpoint?
+      // Or we add a new parameter `isWorkspace`.
+      // Let's check how it's called.
+      // In HomePage: Navigator.push(..., ConversationsPage...) -> ChatPage
+      // In GroupDetailsPage? No chat button there yet.
+      
+      // I need to update ChatPage to accept `isWorkspace` or `workspaceId`.
+      // Let's assume if I pass `workspaceId` as `receiverId`, I need a flag.
+      
+      String endpoint = '/messages/direct/${widget.receiverId}';
+      if (widget.isWorkspace) {
+        endpoint = '/messages/workspace/${widget.receiverId}';
+      }
+
+      final response = await _apiClient.get(endpoint);
       if (response.statusCode == 200) {
         final List<dynamic> history = jsonDecode(response.body);
         setState(() {
@@ -131,11 +156,19 @@ class _ChatPageState extends State<ChatPage> {
     _scrollToBottom();
 
     // Send via socket (only text content, not image path)
-    _socketService.sendMessage(
-      content,
-      widget.currentUserId,
-      receiverId: widget.receiverId,
-    );
+    if (widget.isWorkspace) {
+       _socketService.sendMessage(
+        content,
+        widget.currentUserId,
+        workspaceId: widget.receiverId,
+      );
+    } else {
+      _socketService.sendMessage(
+        content,
+        widget.currentUserId,
+        receiverId: widget.receiverId,
+      );
+    }
 
     _messageController.clear();
   }

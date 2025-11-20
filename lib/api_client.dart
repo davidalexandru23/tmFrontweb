@@ -120,4 +120,17 @@ class ApiClient {
       body: jsonEncode(body),
     );
   }
+
+  Future<http.Response> delete(String path) {
+    return client.delete(
+      Uri.parse('${ApiConfig.baseUrl}$path'),
+    );
+  }
+
+  Future<http.Response> put(String path, dynamic body) {
+    return client.put(
+      Uri.parse('${ApiConfig.baseUrl}$path'),
+      body: jsonEncode(body),
+    );
+  }
 }

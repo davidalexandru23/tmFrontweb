@@ -604,11 +604,120 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                       ? const CircularProgressIndicator(color: Colors.white)
                       : const Text('Deleagă Sarcina'),
                 ),
+                
+                const SizedBox(height: 24),
+                
+                // NOU: Butoane de Editare și Ștergere (Doar pentru Owner/Leader)
+                if (userRole == 'OWNER' || userRole == 'LEADER') ...[
+                  const Divider(color: Colors.grey),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      TextButton.icon(
+                        icon: const Icon(Icons.edit, color: Colors.blue),
+                        label: const Text('Editează', style: TextStyle(color: Colors.blue)),
+                        onPressed: () => _showEditTaskDialog(title, description),
+                      ),
+                      TextButton.icon(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        label: const Text('Șterge', style: TextStyle(color: Colors.red)),
+                        onPressed: () => _confirmDeleteTask(),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           );
         },
       ),
     );
+  }
+
+  // NOU: Funcții pentru Editare și Ștergere
+
+  Future<void> _confirmDeleteTask() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text('Șterge Sarcina', style: TextStyle(color: Colors.red)),
+        content: const Text('Ești sigur? Această acțiune este ireversibilă.', style: TextStyle(color: Colors.white)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Anulează')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Șterge', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        final response = await widget.apiClient.delete('/tasks/${widget.taskId}');
+        if (response.statusCode == 204) {
+          Navigator.pop(context); // Close page
+        } else {
+          _showError('Eroare la ștergere: ${response.statusCode}');
+        }
+      } catch (e) {
+        _showError('Eroare: $e');
+      }
+    }
+  }
+
+  Future<void> _showEditTaskDialog(String currentTitle, String currentDescription) async {
+    final titleController = TextEditingController(text: currentTitle);
+    final descController = TextEditingController(text: currentDescription);
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text('Editează Sarcina', style: TextStyle(color: Colors.red)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(labelText: 'Titlu', labelStyle: TextStyle(color: Colors.grey)),
+            ),
+            TextField(
+              controller: descController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(labelText: 'Descriere', labelStyle: TextStyle(color: Colors.grey)),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Anulează')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Salvează'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      try {
+        final response = await widget.apiClient.put(
+          '/tasks/${widget.taskId}',
+          {
+            'title': titleController.text,
+            'description': descController.text,
+          },
+        );
+        
+        if (response.statusCode == 200) {
+          _showSuccess('Sarcină actualizată');
+          _refreshDetails();
+        } else {
+           _showError('Eroare la actualizare: ${response.statusCode}');
+        }
+      } catch (e) {
+        _showError('Eroare: $e');
+      }
+    }
   }
 }

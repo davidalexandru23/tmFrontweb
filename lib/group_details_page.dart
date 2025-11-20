@@ -2,16 +2,20 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:task_manager_app/api_client.dart';
+import 'package:task_manager_app/chat_page.dart';
+import 'package:task_manager_app/workspace_tasks_page.dart';
 
 class GroupDetailsPage extends StatefulWidget {
   final String workspaceId;
   final String currentUsername;
+  final String currentUserId;
   final ApiClient apiClient = ApiClient();
 
   GroupDetailsPage({
     super.key,
     required this.workspaceId,
     required this.currentUsername,
+    required this.currentUserId,
   });
 
   @override
@@ -394,17 +398,111 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
                   ],
                 ),
               ),
-              if (canAddMembers)
-                Positioned(
-                  bottom: 16,
-                  right: 16,
-                  child: FloatingActionButton(
-                    onPressed: _showAddMemberDialog,
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                    child: const Icon(Icons.person_add),
-                  ),
+              Positioned(
+                bottom: 16,
+                right: 16,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    FloatingActionButton(
+                      heroTag: 'chatBtn',
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ChatPage(
+                              currentUserId: widget.currentUsername, // Wait, ChatPage needs ID not username?
+                              // In HomePage: ConversationsPage(currentUserId: _userId!)
+                              // Here we only have currentUsername passed in constructor.
+                              // We need userId.
+                              // GroupDetailsPage receives currentUsername.
+                              // We should fetch userId or pass it.
+                              // For now, let's assume we need to fetch it or pass it.
+                              currentUserId: widget.currentUserId,
+                              receiverId: widget.workspaceId,
+                              receiverName: group['name'],
+                              isWorkspace: true,
+                            ),
+                          ),
+                        );
+                      },
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      child: const Icon(Icons.chat),
+                    ),
+                    const SizedBox(height: 16),
+                    if (canAddMembers) ...[
+                      FloatingActionButton(
+                        heroTag: 'tasksBtn',
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => WorkspaceTasksPage(
+                                workspaceId: widget.workspaceId,
+                                workspaceName: group['name'],
+                                currentUsername: widget.currentUsername,
+                              ),
+                            ),
+                          );
+                        },
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        child: const Icon(Icons.list),
+                      ),
+                      const SizedBox(height: 16),
+                      FloatingActionButton(
+                        heroTag: 'addMemberBtn',
+                        onPressed: _showAddMemberDialog,
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        child: const Icon(Icons.person_add),
+                      ),
+                    ],
+                  ],
                 ),
+              ),
+                if (userRole == 'OWNER')
+                  Positioned(
+                    bottom: 16,
+                    left: 16,
+                    child: FloatingActionButton(
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            backgroundColor: Colors.grey[900],
+                            title: const Text('Șterge Grupul', style: TextStyle(color: Colors.red)),
+                            content: const Text('Ești sigur că vrei să ștergi acest grup? Acțiunea este ireversibilă.', style: TextStyle(color: Colors.white)),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Anulează')),
+                              TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Șterge', style: TextStyle(color: Colors.red))),
+                            ],
+                          ),
+                        );
+                        
+                        if (confirm == true) {
+                          try {
+                            final response = await widget.apiClient.delete('/workspaces/${widget.workspaceId}'); // DELETE request
+                            // Note: ApiClient might not have delete method implemented yet? 
+                            // I checked ApiClient in step 146, it has get, post, patch. No delete.
+                            // I need to add delete to ApiClient first!
+                            
+                            if (response.statusCode == 204) {
+                              Navigator.pop(context); // Close page
+                            } else {
+                               _showError('Eroare la ștergere: ${response.statusCode}');
+                            }
+                          } catch (e) {
+                            _showError('Eroare: $e');
+                          }
+                        }
+                      },
+                      backgroundColor: Colors.red[900],
+                      foregroundColor: Colors.white,
+                      child: const Icon(Icons.delete),
+                    ),
+                  ),
             ],
           );
         },

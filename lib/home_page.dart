@@ -88,7 +88,7 @@ class _HomePageState extends State<HomePage> {
          // Acum că avem ID-ul, putem încerca să luăm task-urile create
          // Voi încerca un endpoint specific, dacă nu merge, aia e.
          try {
-           final createdResponse = await _apiClient.get('/tasks?creatorId=$_userId');
+           final createdResponse = await _apiClient.get('/tasks?filter=delegated');
            if (createdResponse.statusCode == 200) {
              setState(() {
                _createdTasks = jsonDecode(createdResponse.body);
@@ -252,6 +252,7 @@ class _HomePageState extends State<HomePage> {
                                 builder: (context) => GroupDetailsPage(
                                   workspaceId: workspace['id'],
                                   currentUsername: widget.username,
+                                  currentUserId: _userId ?? '',
                                 ),
                               ),
                             ).then((_) => _fetchData());
