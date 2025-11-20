@@ -51,47 +51,54 @@ class _MapPageState extends State<MapPage> {
 
   Future<void> _initLocation() async {
     try {
-      bool serviceEnabled;
-      PermissionStatus permissionGranted;
-
-      serviceEnabled = await _location.serviceEnabled();
+      // Check service status with timeout
+      bool serviceEnabled = await _location.serviceEnabled().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => false,
+      );
+      
       if (!serviceEnabled) {
-        serviceEnabled = await _location.requestService();
+        serviceEnabled = await _location.requestService().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => false,
+        );
         if (!serviceEnabled) {
-          // Service disabled, show default location
-          if (mounted) {
-            setState(() {
-              _myLocation = const LatLng(44.4268, 26.1025); // Bucharest default
-              _isLoading = false;
-            });
-          }
-          return;
+          throw Exception('Location service disabled');
         }
       }
 
-      permissionGranted = await _location.hasPermission();
+      // Check permission with timeout
+      PermissionStatus permissionGranted = await _location.hasPermission().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => PermissionStatus.denied,
+      );
+      
       if (permissionGranted == PermissionStatus.denied) {
-        permissionGranted = await _location.requestPermission();
+        permissionGranted = await _location.requestPermission().timeout(
+          const Duration(seconds: 10), // Longer timeout for user interaction
+          onTimeout: () => PermissionStatus.denied,
+        );
         if (permissionGranted != PermissionStatus.granted) {
-          // Permission denied, show default location
-          if (mounted) {
-            setState(() {
-              _myLocation = const LatLng(44.4268, 26.1025); // Bucharest default
-              _isLoading = false;
-            });
-          }
-          return;
+          throw Exception('Location permission denied');
         }
       }
 
-      // Get current location
-      final locationData = await _location.getLocation();
+      // Get location with timeout
+      final locationData = await _location.getLocation().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          throw Exception('Location timeout');
+        },
+      );
+      
       if (mounted) {
         setState(() {
           _myLocation = LatLng(locationData.latitude!, locationData.longitude!);
           _isLoading = false;
         });
-        _mapController.move(_myLocation!, 15);
+        _mapController.move(_myLocation!, 15); // Move map to current location
+        // Send initial update
+        _sendLocationUpdate(locationData.latitude!, locationData.longitude!);
       }
 
       // Listen for updates
