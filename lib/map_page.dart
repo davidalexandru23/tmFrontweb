@@ -31,6 +31,10 @@ class _MapPageState extends State<MapPage> {
   LatLng? _myLocation;
   bool _isLoading = true;
   StreamSubscription<LocationData>? _locationSubscription;
+  
+  // Store workspaces and userId to avoid repeated fetching
+  String? _currentUserId;
+  List<String> _workspaceIds = [];
 
   @override
   void initState() {
@@ -177,9 +181,21 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _initializeUserAndWorkspaces() async {
-     // ... implementation ...
-     // Just adding logging here would require replacing the whole method or assuming context
-     // Let's rely on _fetchInitialLocations logging
+    try {
+      final userResponse = await _apiClient.get('/users/me');
+      if (userResponse.statusCode == 200) {
+        final user = jsonDecode(userResponse.body);
+        _currentUserId = user['id'];
+        
+        final workspacesResponse = await _apiClient.get('/workspaces');
+        if (workspacesResponse.statusCode == 200) {
+          final workspaces = jsonDecode(workspacesResponse.body) as List;
+          _workspaceIds = workspaces.map((ws) => ws['id'] as String).toList();
+        }
+      }
+    } catch (e) {
+      print('Error initializing user: $e');
+    }
   }
 
   Future<void> _fetchInitialLocations() async {
@@ -267,41 +283,7 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
-  // Store workspaces and userId to avoid repeated fetching
-  String? _currentUserId;
-  List<String> _workspaceIds = [];
 
-  Future<void> _initializeUserAndWorkspaces() async {
-    try {
-      final userResponse = await _apiClient.get('/users/me');
-      if (userResponse.statusCode == 200) {
-        final user = jsonDecode(userResponse.body);
-        _currentUserId = user['id'];
-        
-        final workspacesResponse = await _apiClient.get('/workspaces');
-        if (workspacesResponse.statusCode == 200) {
-          final workspaces = jsonDecode(workspacesResponse.body) as List;
-          _workspaceIds = workspaces.map((ws) => ws['id'] as String).toList();
-        }
-      }
-    } catch (e) {
-      print('Error initializing user: $e');
-    }
-  }
-
-  void _sendLocationUpdate(double lat, double long) {
-    if (_currentUserId == null) return;
-    
-    // Send location update for each workspace
-    for (var workspaceId in _workspaceIds) {
-      _socketService.socket?.emit('update_location', {
-        'userId': _currentUserId,
-        'latitude': lat,
-        'longitude': long,
-        'workspaceId': workspaceId,
-      });
-    }
-  }
 
   // Debug logs list
   final List<String> _debugLogs = [];
