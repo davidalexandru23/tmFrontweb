@@ -7,8 +7,13 @@ import 'package:task_manager_app/group_details_page.dart';
 
 class WorkspacesPage extends StatefulWidget {
   final String currentUsername;
+  final String currentUserId;
 
-  const WorkspacesPage({super.key, required this.currentUsername});
+  const WorkspacesPage({
+    super.key,
+    required this.currentUsername,
+    required this.currentUserId,
+  });
 
   @override
   State<WorkspacesPage> createState() => _WorkspacesPageState();
@@ -127,10 +132,11 @@ class _WorkspacesPageState extends State<WorkspacesPage> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => GroupDetailsPage(
-                                workspaceId: workspace['id'],
-                                currentUsername: widget.currentUsername,
-                              ),
+                                builder: (_) => GroupDetailsPage(
+                                  workspaceId: workspace['id'],
+                                  currentUsername: widget.currentUsername,
+                                  currentUserId: widget.currentUserId,
+                                ),
                             ),
                           );
                         },

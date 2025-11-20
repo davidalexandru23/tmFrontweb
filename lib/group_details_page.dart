@@ -411,11 +411,6 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
                           context,
                           MaterialPageRoute(
                             builder: (context) => ChatPage(
-                              currentUserId: widget.currentUsername, // Wait, ChatPage needs ID not username?
-                              // In HomePage: ConversationsPage(currentUserId: _userId!)
-                              // Here we only have currentUsername passed in constructor.
-                              // We need userId.
-                              // GroupDetailsPage receives currentUsername.
                               // We should fetch userId or pass it.
                               // For now, let's assume we need to fetch it or pass it.
                               currentUserId: widget.currentUserId,

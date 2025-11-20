@@ -214,7 +214,10 @@ class _HomePageState extends State<HomePage> {
                         }
                       }),
                       _buildNavButton(Icons.group, 'Grupuri', () {
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => WorkspacesPage(currentUsername: widget.username)));
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => WorkspacesPage(
+                          currentUsername: widget.username,
+                          currentUserId: _userId ?? '',
+                        )));
                       }),
                       _buildNavButton(Icons.map, 'Harta', () {
                         Navigator.push(context, MaterialPageRoute(builder: (_) => const MapPage()));
