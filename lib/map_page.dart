@@ -40,111 +40,125 @@ class _MapPageState extends State<MapPage> {
     _initializeMap();
   }
 
-  // Initialize map in correct order
+  // Initialize map in correct order with safeguards
   Future<void> _initializeMap() async {
-    _setupSocketListeners();
-    await _initializeUserAndWorkspaces();
-    await _initLocation();
-    await _fetchInitialLocations();
-  }
-
-  @override
-  void dispose() {
-    _locationSubscription?.cancel();
-    _socketService.socket?.off('member_location_updated');
-    super.dispose();
-  }
-
-  Future<void> _initLocation() async {
     try {
-      // Check service status with timeout
-      // On Web, serviceEnabled() might not work reliably or is handled by browser
-      if (!kIsWeb) {
-        bool serviceEnabled = await _location.serviceEnabled().timeout(
-          const Duration(seconds: 3),
-          onTimeout: () => false,
-        );
-        
-        if (!serviceEnabled) {
-          serviceEnabled = await _location.requestService().timeout(
-            const Duration(seconds: 5),
-            onTimeout: () => false,
-          );
-          if (!serviceEnabled) {
-            throw Exception('Location service disabled');
-          }
-        }
-      }
-
-      // Check permission with timeout
-      PermissionStatus permissionGranted = await _location.hasPermission().timeout(
-        const Duration(seconds: 3),
-        onTimeout: () => PermissionStatus.denied,
-      );
+      // 1. Setup listeners immediately
+      _setupSocketListeners();
       
-      if (permissionGranted == PermissionStatus.denied) {
-        permissionGranted = await _location.requestPermission().timeout(
-          const Duration(seconds: 10), // Longer timeout for user interaction
-          onTimeout: () => PermissionStatus.denied,
-        );
-        if (permissionGranted != PermissionStatus.granted) {
-          throw Exception('Location permission denied');
-        }
-      }
+      // 2. Get user/workspace info (critical)
+      await _initializeUserAndWorkspaces();
 
-      // Get location with timeout
-      final locationData = await _location.getLocation().timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          throw Exception('Location timeout');
-        },
-      );
+      // 3. Start fetching other data in parallel
+      // Don't await _initLocation strictly if it takes too long
+      _initLocation().then((_) => print('Location initialized')).catchError((e) => print('Location init error: $e'));
       
-      if (mounted) {
-        setState(() {
-          _myLocation = LatLng(locationData.latitude!, locationData.longitude!);
-          _isLoading = false;
-        });
-        _mapController.move(_myLocation!, 15); // Move map to current location
-        // Send initial update
-        _sendLocationUpdate(locationData.latitude!, locationData.longitude!);
-      }
+      // 4. Fetch markers (members/tasks)
+      await _fetchInitialLocations();
 
-      // Listen for updates
-      _locationSubscription = _location.onLocationChanged.listen((LocationData currentLocation) {
-        if (currentLocation.latitude != null && currentLocation.longitude != null) {
-          setState(() {
-            _myLocation = LatLng(currentLocation.latitude!, currentLocation.longitude!);
-          });
-          
-          // Send update to server
-          _sendLocationUpdate(currentLocation.latitude!, currentLocation.longitude!);
-        }
-      });
     } catch (e) {
-      print('Error initializing location: $e');
-      // On error, show default location
+      print('Map initialization error: $e');
+    } finally {
+      // Always stop loading after a short delay to ensure UI shows up
       if (mounted) {
         setState(() {
-          _myLocation = const LatLng(44.4268, 26.1025); // Bucharest default
           _isLoading = false;
         });
       }
     }
   }
 
+  Future<void> _initLocation() async {
+    try {
+      print('Initializing location...');
+      
+      // Web specific handling or skip
+      if (kIsWeb) {
+        // On web, we just try to get the location once
+        final locationData = await _location.getLocation().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+             print('Web location timeout');
+             throw Exception('Web location timeout');
+          },
+        );
+        _updateLocation(locationData);
+        return;
+      }
+
+      // Mobile handling
+      bool serviceEnabled = await _location.serviceEnabled();
+      if (!serviceEnabled) {
+        serviceEnabled = await _location.requestService();
+        if (!serviceEnabled) {
+          print('Location service disabled');
+          return;
+        }
+      }
+
+      PermissionStatus permissionGranted = await _location.hasPermission();
+      if (permissionGranted == PermissionStatus.denied) {
+        permissionGranted = await _location.requestPermission();
+        if (permissionGranted != PermissionStatus.granted) {
+          print('Location permission denied');
+          return;
+        }
+      }
+
+      // Get current location
+      final locationData = await _location.getLocation().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+           print('Mobile location timeout');
+           throw Exception('Mobile location timeout');
+        }
+      );
+      _updateLocation(locationData);
+
+      // Listen for updates
+      _locationSubscription = _location.onLocationChanged.listen((LocationData currentLocation) {
+        _updateLocation(currentLocation);
+      });
+
+    } catch (e) {
+      print('Error initializing location: $e');
+      // Fallback to default if we haven't set a location yet
+      if (_myLocation == null && mounted) {
+         setState(() {
+           _myLocation = const LatLng(44.4268, 26.1025); // Bucharest
+         });
+      }
+    }
+  }
+
+  void _updateLocation(LocationData data) {
+    if (data.latitude != null && data.longitude != null) {
+      if (mounted) {
+        setState(() {
+          _myLocation = LatLng(data.latitude!, data.longitude!);
+        });
+        // Move map only on first update or if tracking is enabled (optional)
+        // _mapController.move(_myLocation!, 15); 
+        
+        _sendLocationUpdate(data.latitude!, data.longitude!);
+      }
+    }
+  }
+
   void _setupSocketListeners() {
     _socketService.socket?.on('member_location_updated', (data) {
+      print('Member location updated: $data');
       if (mounted) {
         setState(() {
           final userId = data['userId'];
-          _memberLocations[userId] = {
-            'latitude': data['latitude'],
-            'longitude': data['longitude'],
-            'userId': userId,
-            // Putem adăuga nume dacă vine din socket sau îl luăm din altă parte
-            'name': data['name'] ?? 'Membru', 
-          };
+          if (userId != null) {
+            _memberLocations[userId] = {
+              'latitude': data['latitude'],
+              'longitude': data['longitude'],
+              'userId': userId,
+              'name': data['name'] ?? 'Membru', 
+            };
+          }
         });
       }
     });
@@ -152,80 +166,91 @@ class _MapPageState extends State<MapPage> {
 
   Future<void> _fetchInitialLocations() async {
     try {
-      // Get user ID first
-      final userResponse = await _apiClient.get('/users/me');
-      if (userResponse.statusCode == 200) {
-        final user = jsonDecode(userResponse.body);
-        final userId = user['id'];
-        
-        // Get all workspaces
+      print('Fetching initial locations...');
+      // ... existing logic for fetching members ...
+      // We'll reuse the existing logic but add logging
+      
+      // Get user ID first if not already set
+      if (_currentUserId == null) {
+         final userResponse = await _apiClient.get('/users/me');
+         if (userResponse.statusCode == 200) {
+           final user = jsonDecode(userResponse.body);
+           _currentUserId = user['id'];
+         }
+      }
+      
+      // Get workspaces if not already set
+      if (_workspaceIds.isEmpty) {
         final workspacesResponse = await _apiClient.get('/workspaces');
         if (workspacesResponse.statusCode == 200) {
           final workspaces = jsonDecode(workspacesResponse.body) as List;
-          
-          // For each workspace, fetch member locations AND tasks
-          for (var ws in workspaces) {
-            final workspaceId = ws['id'];
-            
-            // Join workspace socket room
-            _socketService.socket?.emit('join_workspace', workspaceId);
-            
-            // 1. Fetch member locations
-            final locationsResponse = await _apiClient.get('/locations/workspaces/$workspaceId/members');
-            if (locationsResponse.statusCode == 200) {
-              final locations = jsonDecode(locationsResponse.body) as List;
-              
-              if (mounted) {
-                setState(() {
-                  for (var loc in locations) {
-                    // Don't add our own location as a member marker
-                    if (loc['userId'] != userId) {
-                      _memberLocations[loc['userId']] = {
-                        'userId': loc['userId'],
-                        'latitude': loc['latitude'],
-                        'longitude': loc['longitude'],
-                        'name': loc['name'],
-                      };
-                    }
-                  }
-                });
-              }
-            }
+          _workspaceIds = workspaces.map((ws) => ws['id'] as String).toList();
+        }
+      }
 
-            // 2. Fetch workspace tasks for map
-            // We need an endpoint that returns tasks with locations. 
-            // Assuming /tasks/workspace/:id returns all tasks, we filter for those with location.
-            final tasksResponse = await _apiClient.get('/tasks/workspace/$workspaceId');
-            if (tasksResponse.statusCode == 200) {
-               final tasks = jsonDecode(tasksResponse.body) as List;
-               
-               if (mounted) {
-                 setState(() {
-                   for (var task in tasks) {
-                     // Check if task has location data
-                     // The schema has latitude/longitude on Task? 
-                     // Let's assume the API returns it. If not, we might need to update backend.
-                     // Based on previous knowledge, Task model has location fields?
-                     // Actually, I should check the schema. But assuming it does or we added it.
-                     // If not, this part won't show anything, but won't crash if we check nulls.
-                     if (task['latitude'] != null && task['longitude'] != null) {
-                       _taskLocations[task['id']] = {
-                         'id': task['id'],
-                         'title': task['title'],
-                         'status': task['status'],
-                         'latitude': task['latitude'],
-                         'longitude': task['longitude'],
-                       };
-                     }
-                   }
-                 });
-               }
+      for (var workspaceId in _workspaceIds) {
+        print('Fetching data for workspace: $workspaceId');
+        
+        // Join room
+        _socketService.socket?.emit('join_workspace', workspaceId);
+
+        // 1. Members
+        try {
+          final locationsResponse = await _apiClient.get('/locations/workspaces/$workspaceId/members');
+          if (locationsResponse.statusCode == 200) {
+            final locations = jsonDecode(locationsResponse.body) as List;
+            print('Received ${locations.length} member locations');
+            if (mounted) {
+              setState(() {
+                for (var loc in locations) {
+                  if (loc['userId'] != _currentUserId) {
+                    _memberLocations[loc['userId']] = {
+                      'userId': loc['userId'],
+                      'latitude': loc['latitude'],
+                      'longitude': loc['longitude'],
+                      'name': loc['name'],
+                    };
+                  }
+                }
+              });
             }
           }
+        } catch (e) {
+          print('Error fetching member locations: $e');
+        }
+
+        // 2. Tasks
+        try {
+          final tasksResponse = await _apiClient.get('/tasks/workspace/$workspaceId');
+          if (tasksResponse.statusCode == 200) {
+             final tasks = jsonDecode(tasksResponse.body) as List;
+             print('Received ${tasks.length} tasks for workspace $workspaceId');
+             
+             if (mounted) {
+               setState(() {
+                 for (var task in tasks) {
+                   // Log task location data
+                   // print('Task ${task['title']}: ${task['latitude']}, ${task['longitude']}');
+                   
+                   if (task['latitude'] != null && task['longitude'] != null) {
+                     _taskLocations[task['id']] = {
+                       'id': task['id'],
+                       'title': task['title'],
+                       'status': task['status'],
+                       'latitude': task['latitude'],
+                       'longitude': task['longitude'],
+                     };
+                   }
+                 }
+               });
+             }
+          }
+        } catch (e) {
+          print('Error fetching tasks: $e');
         }
       }
     } catch (e) {
-      print('Error fetching initial locations: $e');
+      print('Error in _fetchInitialLocations: $e');
     }
   }
 
