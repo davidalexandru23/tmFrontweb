@@ -23,7 +23,10 @@ class SocketService {
     final token = await _storageService.getAccessToken();
     
     // NOU: Configurare mai robustă
-    socket = IO.io(ApiConfig.baseUrl, IO.OptionBuilder()
+    // Socket.IO connects to the root domain, not the API path
+    final socketUrl = "https://tm.davidab.ro"; 
+    
+    socket = IO.io(socketUrl, IO.OptionBuilder()
       .setTransports(['websocket'])
       .disableAutoConnect()
       .setExtraHeaders({'Authorization': 'Bearer $token'})

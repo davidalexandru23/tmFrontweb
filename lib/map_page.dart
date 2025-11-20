@@ -52,18 +52,21 @@ class _MapPageState extends State<MapPage> {
   Future<void> _initLocation() async {
     try {
       // Check service status with timeout
-      bool serviceEnabled = await _location.serviceEnabled().timeout(
-        const Duration(seconds: 3),
-        onTimeout: () => false,
-      );
-      
-      if (!serviceEnabled) {
-        serviceEnabled = await _location.requestService().timeout(
-          const Duration(seconds: 5),
+      // On Web, serviceEnabled() might not work reliably or is handled by browser
+      if (!kIsWeb) {
+        bool serviceEnabled = await _location.serviceEnabled().timeout(
+          const Duration(seconds: 3),
           onTimeout: () => false,
         );
+        
         if (!serviceEnabled) {
-          throw Exception('Location service disabled');
+          serviceEnabled = await _location.requestService().timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => false,
+          );
+          if (!serviceEnabled) {
+            throw Exception('Location service disabled');
+          }
         }
       }
 

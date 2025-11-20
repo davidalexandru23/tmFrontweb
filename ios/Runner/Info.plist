@@ -45,5 +45,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>Această aplicație are nevoie de acces la locație pentru a arăta poziția ta pe hartă colegilor.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Această aplicație are nevoie de acces la locație pentru a arăta poziția ta pe hartă colegilor.</string>
 </dict>
 </plist>
