@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart';
 import 'package:task_manager_app/socket_service.dart';
 import 'package:task_manager_app/api_client.dart';
+import 'package:task_manager_app/notification_service.dart'; // Added import
 import 'package:google_fonts/google_fonts.dart';
 
 class MapPage extends StatefulWidget {
@@ -54,7 +55,100 @@ class _MapPageState extends State<MapPage> {
     super.dispose();
   }
 
-  // ... (keeping _initLocation and _setupSocketListeners as is)
+  Future<void> _initLocation() async {
+    try {
+      // Check service status with timeout
+      // On Web, serviceEnabled() might not work reliably or is handled by browser
+      if (!kIsWeb) {
+        bool serviceEnabled = await _location.serviceEnabled().timeout(
+          const Duration(seconds: 3),
+          onTimeout: () => false,
+        );
+        
+        if (!serviceEnabled) {
+          serviceEnabled = await _location.requestService().timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => false,
+          );
+          if (!serviceEnabled) {
+            throw Exception('Location service disabled');
+          }
+        }
+      }
+
+      // Check permission with timeout
+      PermissionStatus permissionGranted = await _location.hasPermission().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => PermissionStatus.denied,
+      );
+      
+      if (permissionGranted == PermissionStatus.denied) {
+        permissionGranted = await _location.requestPermission().timeout(
+          const Duration(seconds: 10), // Longer timeout for user interaction
+          onTimeout: () => PermissionStatus.denied,
+        );
+        if (permissionGranted != PermissionStatus.granted) {
+          throw Exception('Location permission denied');
+        }
+      }
+
+      // Get location with timeout
+      final locationData = await _location.getLocation().timeout(
+        const Duration(seconds: 5),
+        onTimeout: () {
+          throw Exception('Location timeout');
+        },
+      );
+      
+      if (mounted) {
+        setState(() {
+          _myLocation = LatLng(locationData.latitude!, locationData.longitude!);
+          _isLoading = false;
+        });
+        _mapController.move(_myLocation!, 15); // Move map to current location
+        // Send initial update
+        _sendLocationUpdate(locationData.latitude!, locationData.longitude!);
+      }
+
+      // Listen for updates
+      _locationSubscription = _location.onLocationChanged.listen((LocationData currentLocation) {
+        if (currentLocation.latitude != null && currentLocation.longitude != null) {
+          setState(() {
+            _myLocation = LatLng(currentLocation.latitude!, currentLocation.longitude!);
+          });
+          
+          // Send update to server
+          _sendLocationUpdate(currentLocation.latitude!, currentLocation.longitude!);
+        }
+      });
+    } catch (e) {
+      print('Error initializing location: $e');
+      // On error, show default location
+      if (mounted) {
+        setState(() {
+          _myLocation = const LatLng(44.4268, 26.1025); // Bucharest default
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _setupSocketListeners() {
+    _socketService.socket?.on('member_location_updated', (data) {
+      if (mounted) {
+        setState(() {
+          final userId = data['userId'];
+          _memberLocations[userId] = {
+            'latitude': data['latitude'],
+            'longitude': data['longitude'],
+            'userId': userId,
+            // Putem adăuga nume dacă vine din socket sau îl luăm din altă parte
+            'name': data['name'] ?? 'Membru', 
+          };
+        });
+      }
+    });
+  }
 
   Future<void> _fetchInitialLocations() async {
     try {

@@ -36,6 +36,7 @@ class _ChatPageState extends State<ChatPage> {
   
   // NOU: Ascultăm statusul conexiunii
   bool _isConnected = false;
+  StreamSubscription? _socketSubscription; // Added field
 
   @override
   void initState() {
