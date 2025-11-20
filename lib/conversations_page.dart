@@ -48,7 +48,7 @@ class _ConversationsPageState extends State<ConversationsPage> {
     );
 
     if (selectedUser != null) {
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => ChatPage(
@@ -57,7 +57,9 @@ class _ConversationsPageState extends State<ConversationsPage> {
             receiverName: selectedUser['name'],
           ),
         ),
-      ).then((_) => _fetchConversations());
+      );
+      // Refresh conversations after returning from chat
+      _fetchConversations();
     }
   }
 
@@ -140,8 +142,8 @@ class _ConversationsPageState extends State<ConversationsPage> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         trailing: const Icon(Icons.arrow_forward_ios, color: Colors.red, size: 16),
-                        onTap: () {
-                          Navigator.push(
+                        onTap: () async {
+                          await Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => ChatPage(
@@ -150,7 +152,9 @@ class _ConversationsPageState extends State<ConversationsPage> {
                                 receiverName: user['name'],
                               ),
                             ),
-                          ).then((_) => _fetchConversations());
+                          );
+                          // Refresh conversations after returning from chat
+                          _fetchConversations();
                         },
                       ),
                     );

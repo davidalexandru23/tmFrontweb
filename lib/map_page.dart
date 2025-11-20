@@ -45,46 +45,71 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _initLocation() async {
-    bool serviceEnabled;
-    PermissionStatus permissionGranted;
+    try {
+      bool serviceEnabled;
+      PermissionStatus permissionGranted;
 
-    serviceEnabled = await _location.serviceEnabled();
-    if (!serviceEnabled) {
-      serviceEnabled = await _location.requestService();
+      serviceEnabled = await _location.serviceEnabled();
       if (!serviceEnabled) {
-        return;
+        serviceEnabled = await _location.requestService();
+        if (!serviceEnabled) {
+          // Service disabled, show default location
+          if (mounted) {
+            setState(() {
+              _myLocation = const LatLng(44.4268, 26.1025); // Bucharest default
+              _isLoading = false;
+            });
+          }
+          return;
+        }
       }
-    }
 
-    permissionGranted = await _location.hasPermission();
-    if (permissionGranted == PermissionStatus.denied) {
-      permissionGranted = await _location.requestPermission();
-      if (permissionGranted != PermissionStatus.granted) {
-        return;
+      permissionGranted = await _location.hasPermission();
+      if (permissionGranted == PermissionStatus.denied) {
+        permissionGranted = await _location.requestPermission();
+        if (permissionGranted != PermissionStatus.granted) {
+          // Permission denied, show default location
+          if (mounted) {
+            setState(() {
+              _myLocation = const LatLng(44.4268, 26.1025); // Bucharest default
+              _isLoading = false;
+            });
+          }
+          return;
+        }
       }
-    }
 
-    // Get current location
-    final locationData = await _location.getLocation();
-    if (mounted) {
-      setState(() {
-        _myLocation = LatLng(locationData.latitude!, locationData.longitude!);
-        _isLoading = false;
-      });
-      _mapController.move(_myLocation!, 15);
-    }
-
-    // Listen for updates
-    _locationSubscription = _location.onLocationChanged.listen((LocationData currentLocation) {
-      if (currentLocation.latitude != null && currentLocation.longitude != null) {
+      // Get current location
+      final locationData = await _location.getLocation();
+      if (mounted) {
         setState(() {
-          _myLocation = LatLng(currentLocation.latitude!, currentLocation.longitude!);
+          _myLocation = LatLng(locationData.latitude!, locationData.longitude!);
+          _isLoading = false;
         });
-        
-        // Send update to server
-        _sendLocationUpdate(currentLocation.latitude!, currentLocation.longitude!);
+        _mapController.move(_myLocation!, 15);
       }
-    });
+
+      // Listen for updates
+      _locationSubscription = _location.onLocationChanged.listen((LocationData currentLocation) {
+        if (currentLocation.latitude != null && currentLocation.longitude != null) {
+          setState(() {
+            _myLocation = LatLng(currentLocation.latitude!, currentLocation.longitude!);
+          });
+          
+          // Send update to server
+          _sendLocationUpdate(currentLocation.latitude!, currentLocation.longitude!);
+        }
+      });
+    } catch (e) {
+      print('Error initializing location: $e');
+      // On error, show default location
+      if (mounted) {
+        setState(() {
+          _myLocation = const LatLng(44.4268, 26.1025); // Bucharest default
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void _setupSocketListeners() {
