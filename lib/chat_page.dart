@@ -31,22 +31,38 @@ class _ChatPageState extends State<ChatPage> {
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _imagePicker = ImagePicker();
   bool _isLoading = true;
+  
+  // NOU: Ascultăm statusul conexiunii
+  bool _isConnected = false;
 
   @override
   void initState() {
     super.initState();
     _socketService.initSocket();
+    
+    // Ascultăm schimbările de conexiune
+    _socketService.isConnected.addListener(_updateConnectionStatus);
+    _updateConnectionStatus(); // Setăm starea inițială
+
+    // Ne asigurăm că suntem în cameră
     _socketService.joinRoom(widget.currentUserId);
+    
     _loadMessageHistory();
 
     _socketService.onMessage((data) {
       if (mounted) {
+        print('ChatPage received message: $data');
         // Only add if it's for this conversation
         final senderId = data['senderId'];
         final receiverId = data['receiverId'];
         
+        // Verificăm dacă mesajul aparține acestei conversații
+        // 1. Mesaj primit de la interlocutor
+        // 2. Mesaj trimis de mine (dacă vine prin socket ca confirmare, deși îl adăugăm și local)
         if ((senderId == widget.receiverId && receiverId == widget.currentUserId) ||
             (senderId == widget.currentUserId && receiverId == widget.receiverId)) {
+          
+          // Evităm duplicatele dacă mesajul există deja (verificare simplă după conținut și timestamp ar fi ideal, dar momentan ne bazăm pe faptul că localMessage nu are ID de la server încă)
           setState(() {
             _messages.add(data);
           });
@@ -54,6 +70,22 @@ class _ChatPageState extends State<ChatPage> {
         }
       }
     });
+  }
+
+  void _updateConnectionStatus() {
+    if (mounted) {
+      setState(() {
+        _isConnected = _socketService.isConnected.value;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _socketService.isConnected.removeListener(_updateConnectionStatus);
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadMessageHistory() async {
@@ -67,11 +99,13 @@ class _ChatPageState extends State<ChatPage> {
           _isLoading = false;
         });
         _scrollToBottom();
+      } else {
+        print('Error loading history: ${response.statusCode}');
+        setState(() => _isLoading = false);
       }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      print('Exception loading history: $e');
+      setState(() => _isLoading = false);
     }
   }
 
@@ -135,24 +169,39 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   @override
-  void dispose() {
-    _messageController.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        title: Text(
-          widget.receiverName,
-          style: GoogleFonts.robotoSlab(
-            color: Colors.red,
-            fontWeight: FontWeight.bold,
-          ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.receiverName,
+              style: GoogleFonts.robotoSlab(
+                color: Colors.red,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _isConnected ? Colors.green : Colors.red,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _isConnected ? 'Conectat' : 'Deconectat',
+                  style: const TextStyle(color: Colors.grey, fontSize: 10),
+                ),
+              ],
+            ),
+          ],
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.red),

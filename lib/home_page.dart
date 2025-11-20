@@ -32,6 +32,7 @@ class _HomePageState extends State<HomePage> {
 
   List<dynamic> _workspaces = [];
   List<dynamic> _tasks = [];
+  List<dynamic> _createdTasks = []; // NOU
   bool _isLoading = true;
   String? _userId;
 
@@ -61,20 +62,49 @@ class _HomePageState extends State<HomePage> {
         });
       }
 
-      // 2. Fetch Tasks
+      // 2. Fetch Assigned Tasks
       final tasksResponse = await _apiClient.get('/tasks');
       if (tasksResponse.statusCode == 200) {
         setState(() {
           _tasks = jsonDecode(tasksResponse.body);
         });
       }
+
+      // 3. Fetch Created Tasks (NOU)
+      // Încercăm să luăm task-urile create de user.
+      // Dacă API-ul nu suportă filtrare directă, momentan lăsăm lista goală sau
+      // presupunem că /tasks returnează tot și filtrăm noi (dacă am avea ID-ul userului).
+      // Totuși, pentru a fi safe, facem un request separat dacă există endpoint.
+      // Presupunem un endpoint /tasks/created sau filtrare.
+      // Voi încerca să filtrez local dacă am user ID, altfel fac request.
       
-      // Get User ID
+      // Get User ID first
       final userResponse = await _apiClient.get('/users/me');
       if (userResponse.statusCode == 200) {
          final user = jsonDecode(userResponse.body);
          _userId = user['id'];
          _socketService.joinRoom(_userId!);
+         
+         // Acum că avem ID-ul, putem încerca să luăm task-urile create
+         // Voi încerca un endpoint specific, dacă nu merge, aia e.
+         try {
+           final createdResponse = await _apiClient.get('/tasks?creatorId=$_userId');
+           if (createdResponse.statusCode == 200) {
+             setState(() {
+               _createdTasks = jsonDecode(createdResponse.body);
+             });
+           } else {
+             // Fallback: poate endpoint-ul e altul, de ex /tasks/created
+             final createdResponse2 = await _apiClient.get('/tasks/created');
+             if (createdResponse2.statusCode == 200) {
+                setState(() {
+                  _createdTasks = jsonDecode(createdResponse2.body);
+                });
+             }
+           }
+         } catch (e) {
+           print('Error fetching created tasks: $e');
+         }
       }
 
     } catch (e) {
@@ -96,6 +126,30 @@ class _HomePageState extends State<HomePage> {
         MaterialPageRoute(builder: (context) => const LoginPage()),
       );
     }
+  }
+  
+  // NOU: Helper pentru construirea unui item de task
+  Widget _buildTaskItem(dynamic task) {
+    return Card(
+      color: Colors.grey[900],
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        title: Text(task['title'] ?? 'Fără titlu', style: const TextStyle(color: Colors.white)),
+        subtitle: Text(task['status'] ?? 'UNKNOWN', style: const TextStyle(color: Colors.grey)),
+        trailing: const Icon(Icons.arrow_forward_ios, color: Colors.red, size: 16),
+        onTap: () {
+           Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => TaskDetailsPage(
+                taskId: task['id'],
+                currentUsername: widget.username,
+              ),
+            ),
+          ).then((_) => _fetchData());
+        },
+      ),
+    );
   }
 
   @override
@@ -211,7 +265,7 @@ class _HomePageState extends State<HomePage> {
                   
                   // Tasks Section
                   Text(
-                    'SARCINI CURENTE',
+                    'SARCINI',
                     style: GoogleFonts.robotoSlab(
                       color: Colors.red,
                       fontWeight: FontWeight.bold,
@@ -219,33 +273,46 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                   ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _tasks.length,
-                    itemBuilder: (context, index) {
-                      final task = _tasks[index];
-                      return Card(
-                        color: Colors.grey[900],
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          title: Text(task['title'], style: const TextStyle(color: Colors.white)),
-                          subtitle: Text(task['status'], style: const TextStyle(color: Colors.grey)),
-                          trailing: const Icon(Icons.arrow_forward_ios, color: Colors.red, size: 16),
-                          onTap: () {
-                             Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => TaskDetailsPage(
-                                  taskId: task['id'],
-                                  currentUsername: widget.username,
-                                ),
-                              ),
-                            ).then((_) => _fetchData());
-                          },
+                  
+                  // NOU: Tab-uri pentru sarcini
+                  DefaultTabController(
+                    length: 2,
+                    child: Column(
+                      children: [
+                        const TabBar(
+                          indicatorColor: Colors.red,
+                          labelColor: Colors.red,
+                          unselectedLabelColor: Colors.grey,
+                          tabs: [
+                            Tab(text: 'Primite'),
+                            Tab(text: 'Create de mine'),
+                          ],
                         ),
-                      );
-                    },
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 300, // Înălțime fixă pentru listă (sau folosim shrinkWrap cu physics)
+                          child: TabBarView(
+                            children: [
+                              // Tab 1: Sarcini Primite
+                              _tasks.isEmpty
+                                  ? const Center(child: Text('Nu ai sarcini primite.', style: TextStyle(color: Colors.grey)))
+                                  : ListView.builder(
+                                      itemCount: _tasks.length,
+                                      itemBuilder: (context, index) => _buildTaskItem(_tasks[index]),
+                                    ),
+                                    
+                              // Tab 2: Sarcini Create de mine
+                              _createdTasks.isEmpty
+                                  ? const Center(child: Text('Nu ai creat sarcini pentru alții.', style: TextStyle(color: Colors.grey)))
+                                  : ListView.builder(
+                                      itemCount: _createdTasks.length,
+                                      itemBuilder: (context, index) => _buildTaskItem(_createdTasks[index]),
+                                    ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),

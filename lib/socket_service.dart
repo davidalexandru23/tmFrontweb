@@ -8,6 +8,9 @@ class SocketService {
   late IO.Socket socket;
   final StorageService _storageService = StorageService();
   final NotificationService _notificationService = NotificationService();
+  
+  // NOU: Stream pentru statusul conexiunii
+  final ValueNotifier<bool> isConnected = ValueNotifier<bool>(false);
 
   factory SocketService() {
     return _instance;
@@ -18,23 +21,33 @@ class SocketService {
   void initSocket() async {
     final token = await _storageService.getAccessToken();
     
-    socket = IO.io(ApiConfig.baseUrl, <String, dynamic>{
-      'transports': ['websocket'],
-      'autoConnect': false,
-      'extraHeaders': {'Authorization': 'Bearer $token'}
-    });
+    // NOU: Configurare mai robustă
+    socket = IO.io(ApiConfig.baseUrl, IO.OptionBuilder()
+      .setTransports(['websocket'])
+      .disableAutoConnect()
+      .setExtraHeaders({'Authorization': 'Bearer $token'})
+      .build()
+    );
 
     socket.connect();
 
     socket.onConnect((_) {
-      print('Connected to socket');
+      print('Connected to socket: ${socket.id}');
+      isConnected.value = true;
     });
 
     socket.onDisconnect((_) {
       print('Disconnected from socket');
+      isConnected.value = false;
+    });
+
+    socket.onConnectError((data) {
+      print('Socket connection error: $data');
+      isConnected.value = false;
     });
 
     socket.on('notification', (data) {
+      print('Notification received: $data');
       _notificationService.showNotification(
         data['title'] ?? 'Notificare',
         data['body'] ?? '',
@@ -43,10 +56,20 @@ class SocketService {
   }
 
   void joinRoom(String room) {
-    socket.emit('join_room', room);
+    if (socket.connected) {
+      print('Joining room: $room');
+      socket.emit('join_room', room);
+    } else {
+      // Dacă nu e conectat, așteptăm conectarea
+      socket.onConnect((_) {
+        print('Joining room (delayed): $room');
+        socket.emit('join_room', room);
+      });
+    }
   }
 
   void sendMessage(String content, String senderId, {String? receiverId, String? workspaceId}) {
+    print('Sending message from $senderId to ${receiverId ?? workspaceId}');
     socket.emit('send_message', {
       'content': content,
       'senderId': senderId,
@@ -56,7 +79,12 @@ class SocketService {
   }
 
   void onMessage(Function(dynamic) callback) {
-    socket.on('receive_message', callback);
+    // Eliminăm listenerii vechi pentru a evita duplicatele
+    socket.off('receive_message');
+    socket.on('receive_message', (data) {
+      print('Message received: $data');
+      callback(data);
+    });
   }
 
   void onNotification(Function(dynamic) callback) {
