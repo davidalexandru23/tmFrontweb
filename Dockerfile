@@ -1,34 +1,40 @@
 # Stage 1: Build Flutter Web
 FROM ghcr.io/cirruslabs/flutter:stable AS build
 
+# Setăm directorul de lucru
 WORKDIR /app
 
-# Copy pubspec files
+# Copiem fișierele de dependențe
 COPY pubspec.yaml pubspec.lock ./
 
-# Get dependencies
+# Instalăm dependențele
 RUN flutter pub get
 
-# Copy the rest of the app
+# Copiem restul aplicației
 COPY . .
 
-# Build for web (production)
-RUN flutter build web --release --web-renderer canvaskit
+# Ne asigurăm că web e activat (nu strică, chiar dacă e deja)
+RUN flutter config --enable-web
+
+# Build pentru web (production)
+# Atenție: fără --web-renderer, pentru că în versiunea asta de Flutter nu există flag-ul
+RUN flutter build web --release
 
 # Stage 2: Serve with Nginx
 FROM nginx:alpine
 
-# Copy the built web app to nginx
+# Copiem build-ul în root-ul Nginx
 COPY --from=build /app/build/web /usr/share/nginx/html
 
-# Create nginx config for Flutter Web
+# Config Nginx pentru single-page app Flutter Web
 RUN echo 'server { \
     listen 80; \
-    location / { \
+    server_name _; \
     root /usr/share/nginx/html; \
-    try_files $uri $uri/ /index.html; \
+    location / { \
+        try_files $uri $uri/ /index.html; \
     } \
-    }' > /etc/nginx/conf.d/default.conf
+}' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
