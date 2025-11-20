@@ -29,6 +29,5 @@ windows/
 
 # Other
 *.log
-*.lock
-pubspec.lock
+
 .metadata
