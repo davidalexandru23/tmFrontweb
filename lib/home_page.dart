@@ -8,7 +8,7 @@ import 'package:task_manager_app/group_details_page.dart';
 import 'package:task_manager_app/create_task_page.dart';
 import 'package:task_manager_app/task_details_page.dart';
 import 'package:task_manager_app/calendar_page.dart';
-import 'package:task_manager_app/chat_page.dart';
+import 'package:task_manager_app/conversations_page.dart';
 import 'package:task_manager_app/map_page.dart';
 import 'package:task_manager_app/notification_service.dart';
 import 'package:task_manager_app/socket_service.dart';
@@ -148,7 +148,7 @@ class _HomePageState extends State<HomePage> {
                       }),
                       _buildNavButton(Icons.chat, 'Chat', () {
                         if (_userId != null) {
-                           Navigator.push(context, MaterialPageRoute(builder: (_) => ChatPage(currentUserId: _userId!)));
+                           Navigator.push(context, MaterialPageRoute(builder: (_) => ConversationsPage(currentUserId: _userId!)));
                         }
                       }),
                       _buildNavButton(Icons.map, 'Harta', () {
@@ -185,8 +185,8 @@ class _HomePageState extends State<HomePage> {
                               context,
                               MaterialPageRoute(
                                 builder: (context) => GroupDetailsPage(
-                                  groupId: workspace['id'],
-                                  groupName: workspace['name'],
+                                  workspaceId: workspace['id'],
+                                  currentUsername: widget.username,
                                 ),
                               ),
                             ).then((_) => _fetchData());
@@ -225,7 +225,10 @@ class _HomePageState extends State<HomePage> {
                              Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => TaskDetailsPage(taskId: task['id']),
+                                builder: (context) => TaskDetailsPage(
+                                  taskId: task['id'],
+                                  currentUsername: widget.username,
+                                ),
                               ),
                             ).then((_) => _fetchData());
                           },

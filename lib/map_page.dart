@@ -94,7 +94,7 @@ class _MapPageState extends State<MapPage> {
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.app',
+                  userAgentPackageName: 'com.example.task_manager_app',
                   // Dark mode tiles would be better, but standard OSM for now
                 ),
                 MarkerLayer(markers: _markers),

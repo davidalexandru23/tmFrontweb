@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:task_manager_app/api_client.dart';
+import 'package:task_manager_app/location_picker_dialog.dart';
 
 class CreateTaskPage extends StatefulWidget {
   const CreateTaskPage({super.key});
@@ -26,6 +27,8 @@ class _CreateTaskPageState extends State<CreateTaskPage> {
   String? _selectedWorkspaceId;
   String? _selectedAssigneeId;
   DateTime? _selectedDate;
+  double? _selectedLatitude;
+  double? _selectedLongitude;
 
   bool _isLoading = false;
 
@@ -113,14 +116,34 @@ class _CreateTaskPageState extends State<CreateTaskPage> {
     }
   }
 
+  Future<void> _selectLocation() async {
+    // Open a simple dialog with a map picker
+    final result = await showDialog<Map<String, double>>(
+      context: context,
+      builder: (context) => LocationPickerDialog(
+        initialLat: _selectedLatitude ?? 44.4268,
+        initialLng: _selectedLongitude ?? 26.1025,
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedLatitude = result['lat'];
+        _selectedLongitude = result['lng'];
+      });
+    }
+  }
+
   // --- Funcția Principală de Salvare ---
 
   Future<void> _handleCreateTask() async {
     if (!(_formKey.currentState?.validate() ?? false)) {
       return; // Validare eșuată
     }
-    if (_selectedWorkspaceId == null || _selectedAssigneeId == null) {
-      _showError('Trebuie să selectezi un grup și un destinatar.');
+    
+    // Workspace is optional now
+    if (_selectedWorkspaceId != null && _selectedAssigneeId == null) {
+      _showError('Dacă alegi un grup, trebuie să alegi și un destinatar.');
       return;
     }
 
@@ -130,12 +153,13 @@ class _CreateTaskPageState extends State<CreateTaskPage> {
 
     try {
       final body = {
-        'workspaceId': _selectedWorkspaceId,
+        if (_selectedWorkspaceId != null) 'workspaceId': _selectedWorkspaceId,
         'title': _titleController.text,
-        'description': _descriptionController.text,
-        'assigneeId': _selectedAssigneeId,
-        // Convertim data în formatul așteptat de server (ISO 8601 UTC)
-        'dueDate': _selectedDate?.toUtc().toIso8601String(),
+        if (_descriptionController.text.isNotEmpty) 'description': _descriptionController.text,
+        if (_selectedAssigneeId != null) 'assigneeId': _selectedAssigneeId,
+        if (_selectedDate != null) 'dueDate': _selectedDate!.toUtc().toIso8601String(),
+        if (_selectedLatitude != null) 'latitude': _selectedLatitude,
+        if (_selectedLongitude != null) 'longitude': _selectedLongitude,
       };
 
       final response = await _apiClient.post('/tasks', body);
@@ -237,8 +261,7 @@ class _CreateTaskPageState extends State<CreateTaskPage> {
                     }).toList(),
                     onChanged:
                         _onWorkspaceChanged, // Declansează încărcarea membrilor
-                    validator: (value) =>
-                        (value == null) ? 'Grupul e obligatoriu' : null,
+                    validator: null, // Workspace is now optional
                   );
                 },
               ),
@@ -280,15 +303,36 @@ class _CreateTaskPageState extends State<CreateTaskPage> {
                       })
                       .whereType<DropdownMenuItem<String>>()
                       .toList(), // Filtrăm valorile null // Filtrăm valorile null
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedAssigneeId = value;
-                    });
-                  },
-                  validator: (value) =>
-                      (value == null) ? 'Destinatarul e obligatoriu' : null,
+                   onChanged: (value) {
+                     setState(() {
+                       _selectedAssigneeId = value;
+                     });
+                   },
+                   validator: null, // Optional if workspace is selected
                 ),
               const SizedBox(height: 24),
+
+              // --- Selector Locație ---
+              ListTile(
+                tileColor: Colors.grey[900],
+                shape: RoundedRectangleBorder(
+                  side: const BorderSide(color: Colors.red),
+                  borderRadius: BorderRadius.circular(4.0),
+                ),
+                leading: const Icon(Icons.location_on, color: Colors.red),
+                title: Text(
+                  _selectedLatitude == null
+                      ? 'Selectează locația (opțional)'
+                      : 'Locație: ${_selectedLatitude!.toStringAsFixed(4)}, ${_selectedLongitude!.toStringAsFixed(4)}',
+                  style: TextStyle(
+                    color: _selectedLatitude == null
+                        ? Colors.redAccent
+                        : Colors.white,
+                  ),
+                ),
+                onTap: _selectLocation,
+              ),
+              const SizedBox(height: 16),
 
               // --- Selector Dată ---
               ListTile(

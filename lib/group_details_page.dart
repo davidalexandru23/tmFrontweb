@@ -6,14 +6,12 @@ import 'package:task_manager_app/api_client.dart';
 class GroupDetailsPage extends StatefulWidget {
   final String workspaceId;
   final String currentUsername;
-  final String userRole; // Rolul tău în acest grup (ex: 'OWNER', 'LEADER')
   final ApiClient apiClient = ApiClient();
 
   GroupDetailsPage({
     super.key,
     required this.workspaceId,
     required this.currentUsername,
-    required this.userRole,
   });
 
   @override
@@ -280,9 +278,6 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
 
   @override
   Widget build(BuildContext context) {
-    bool canAddMembers =
-        (widget.userRole == 'OWNER' || widget.userRole == 'LEADER');
-
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -321,82 +316,99 @@ class _GroupDetailsPageState extends State<GroupDetailsPage> {
           final group = snapshot.data!;
           final members = (group['members'] as List? ?? []);
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  group['name'] ?? 'Nume Grup',
-                  style: GoogleFonts.robotoSlab(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const Divider(color: Colors.grey, height: 32),
-                Text(
-                  'Membri Grup',
-                  style: GoogleFonts.robotoSlab(
-                    color: Colors.red,
-                    fontSize: 18,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: members.length,
-                  itemBuilder: (context, index) {
-                    final member = members[index];
-                    // final user = member['user']; // <-- ȘTERGEM ASTA
-                    final role = member['role'] ?? 'MEMBER';
-                    final userName =
-                        member['name'] as String; // <-- LUĂM DIRECT
-                    final isYou = (userName == widget.currentUsername);
-                    return Card(
-                      color: Colors.grey[900],
-                      margin: const EdgeInsets.symmetric(vertical: 4.0),
-                      child: ListTile(
-                        leading: Icon(
-                          role == 'OWNER' ? Icons.star : Icons.person,
-                          color: isYou
-                              ? Colors.green
-                              : (role == 'OWNER' ? Colors.yellow : Colors.red),
-                        ),
-                        title: Text(
-                          isYou ? "$userName (Tu)" : userName,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        subtitle: Text(
-                          role,
-                          style: TextStyle(
-                            color: role == 'OWNER'
-                                ? Colors.yellow
-                                : Colors.grey,
-                          ),
-                        ),
+          // Determine user role
+          String userRole = 'MEMBER';
+          final myMemberInfo = members.firstWhere((m) {
+             if (m == null || m['name'] == null) return false;
+             return m['name'] == widget.currentUsername;
+          }, orElse: () => null);
+          
+          if (myMemberInfo != null) {
+             userRole = myMemberInfo['role'] as String? ?? 'MEMBER';
+          }
+
+          final bool canAddMembers = (userRole == 'OWNER' || userRole == 'LEADER');
+
+          return Stack(
+            children: [
+              SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      group['name'] ?? 'Nume Grup',
+                      style: GoogleFonts.robotoSlab(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
                       ),
-                    );
-                  },
+                    ),
+                    const Divider(color: Colors.grey, height: 32),
+                    Text(
+                      'Membri Grup',
+                      style: GoogleFonts.robotoSlab(
+                        color: Colors.red,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: members.length,
+                      itemBuilder: (context, index) {
+                        final member = members[index];
+                        final role = member['role'] ?? 'MEMBER';
+                        final userName = member['name'] as String;
+                        final isYou = (userName == widget.currentUsername);
+                        return Card(
+                          color: Colors.grey[900],
+                          margin: const EdgeInsets.symmetric(vertical: 4.0),
+                          child: ListTile(
+                            leading: Icon(
+                              role == 'OWNER' ? Icons.star : Icons.person,
+                              color: isYou
+                                  ? Colors.green
+                                  : (role == 'OWNER' ? Colors.yellow : Colors.red),
+                            ),
+                            title: Text(
+                              isYou ? "$userName (Tu)" : userName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            subtitle: Text(
+                              role,
+                              style: TextStyle(
+                                color: role == 'OWNER'
+                                    ? Colors.yellow
+                                    : Colors.grey,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              if (canAddMembers)
+                Positioned(
+                  bottom: 16,
+                  right: 16,
+                  child: FloatingActionButton(
+                    onPressed: _showAddMemberDialog,
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    child: const Icon(Icons.person_add),
+                  ),
+                ),
+            ],
           );
         },
       ),
-      // Arătăm butonul doar dacă utilizatorul are permisiunea
-      floatingActionButton: canAddMembers
-          ? FloatingActionButton(
-              onPressed: _showAddMemberDialog,
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              child: const Icon(Icons.person_add),
-            )
-          : null,
     );
   }
 }
