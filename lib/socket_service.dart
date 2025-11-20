@@ -99,6 +99,18 @@ class SocketService {
     }
   }
 
+  void joinWorkspace(String workspaceId) {
+    final roomName = 'workspace_$workspaceId';
+    _joinedRooms.add(roomName); // Track room internally as the full name
+    
+    if (socket.connected) {
+      print('Joining workspace: $workspaceId');
+      socket.emit('join_workspace', workspaceId);
+    } else {
+      print('Queueing join workspace: $workspaceId');
+    }
+  }
+
   void sendMessage(String content, String senderId, {String? receiverId, String? workspaceId}) {
     print('Sending message from $senderId to ${receiverId ?? workspaceId}');
     socket.emit('send_message', {

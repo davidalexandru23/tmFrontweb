@@ -49,7 +49,11 @@ class _ChatPageState extends State<ChatPage> {
     _updateConnectionStatus(); // Setăm starea inițială
 
     // Ne asigurăm că suntem în cameră
-    _socketService.joinRoom(widget.currentUserId);
+    if (widget.isWorkspace) {
+      _socketService.joinWorkspace(widget.receiverId);
+    } else {
+      _socketService.joinRoom(widget.currentUserId);
+    }
     
     _loadMessageHistory();
 
@@ -60,11 +64,28 @@ class _ChatPageState extends State<ChatPage> {
         // Only add if it's for this conversation
         final senderId = data['senderId'];
         final receiverId = data['receiverId'];
+        final workspaceId = data['workspaceId'];
         
-        // Verificăm dacă mesajul aparține acestei conversații
-        // 1. Mesaj primit de la interlocutor
-        // 2. Ignorăm mesajele trimise de mine (le-am adăugat deja optimisitic)
-        if (senderId == widget.receiverId && receiverId == widget.currentUserId) {
+        bool shouldAdd = false;
+
+        if (widget.isWorkspace) {
+          // Pentru grup: mesajul trebuie să fie din acest workspace
+          if (workspaceId == widget.receiverId) {
+            shouldAdd = true;
+          }
+        } else {
+          // Pentru direct: mesajul trebuie să fie de la interlocutor (către mine)
+          if (senderId == widget.receiverId && receiverId == widget.currentUserId) {
+            shouldAdd = true;
+          }
+        }
+
+        // Ignorăm mesajele trimise de mine (le-am adăugat deja optimisitic)
+        if (senderId == widget.currentUserId) {
+          shouldAdd = false;
+        }
+
+        if (shouldAdd) {
           setState(() {
             _messages.add(data);
           });
