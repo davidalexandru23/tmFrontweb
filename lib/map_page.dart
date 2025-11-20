@@ -31,6 +31,7 @@ class _MapPageState extends State<MapPage> {
   @override
   void initState() {
     super.initState();
+    _initializeUserAndWorkspaces();
     _initLocation();
     _setupSocketListeners();
     _fetchInitialLocations();
@@ -104,57 +105,87 @@ class _MapPageState extends State<MapPage> {
   }
 
   Future<void> _fetchInitialLocations() async {
-    // Fetch locations of members in my workspaces
-    // Deoarece nu avem un endpoint dedicat "get all members locations" care să returneze tot,
-    // putem folosi endpoint-ul de task locations sau să iterăm prin workspace-uri.
-    // Pentru simplitate, ne bazăm pe socket updates și poate un endpoint nou dacă e critic.
-    // Dar utilizatorul a cerut "sa vad membrii din grup live pe harti".
-    // Putem face un request la /users/locations dacă ar exista, sau /workspaces/:id/members
-    // Momentan, ne bazăm pe faptul că userii trimit locația când intră.
-    
-    // Putem implementa un "request_locations" pe socket?
-    // Sau un endpoint GET /workspaces/members/locations
-    
-    // Implementare simplă: doar socket updates pentru "live".
-  }
-
-  void _sendLocationUpdate(double lat, double long) async {
-    // Get user ID from storage or context?
-    // We need userId. Let's fetch 'me' first or store it.
     try {
+      // Get user ID first
       final userResponse = await _apiClient.get('/users/me');
       if (userResponse.statusCode == 200) {
         final user = jsonDecode(userResponse.body);
         final userId = user['id'];
         
-        // Send to all workspaces I am in?
-        // Or just send to server and server broadcasts to my workspaces.
-        // Server implementation:
-        // socket.on('update_location', ... broadcasts to workspace_...
-        
-        // We need to join workspace rooms first!
-        // Let's fetch workspaces and join rooms.
+        // Get all workspaces
         final workspacesResponse = await _apiClient.get('/workspaces');
         if (workspacesResponse.statusCode == 200) {
-           final workspaces = jsonDecode(workspacesResponse.body) as List;
-           for (var ws in workspaces) {
-             _socketService.socket?.emit('join_workspace', ws['id']);
-             
-             // Send update
-             _socketService.socket?.emit('update_location', {
-               'userId': userId,
-               'latitude': lat,
-               'longitude': long,
-               'workspaceId': ws['id'], // Send for each workspace or server handles multiple?
-               // Server implementation handles one workspaceId per event currently.
-               // Ideally server should look up user's workspaces.
-               // But for now, we emit for each workspace.
-             });
-           }
+          final workspaces = jsonDecode(workspacesResponse.body) as List;
+          
+          // For each workspace, fetch member locations and join the room
+          for (var ws in workspaces) {
+            final workspaceId = ws['id'];
+            
+            // Join workspace socket room
+            _socketService.socket?.emit('join_workspace', workspaceId);
+            
+            // Fetch member locations
+            final locationsResponse = await _apiClient.get('/locations/workspaces/$workspaceId/members');
+            if (locationsResponse.statusCode == 200) {
+              final locations = jsonDecode(locationsResponse.body) as List;
+              
+              if (mounted) {
+                setState(() {
+                  for (var loc in locations) {
+                    // Don't add our own location as a member marker
+                    if (loc['userId'] != userId) {
+                      _memberLocations[loc['userId']] = {
+                        'userId': loc['userId'],
+                        'latitude': loc['latitude'],
+                        'longitude': loc['longitude'],
+                        'name': loc['name'],
+                      };
+                    }
+                  }
+                });
+              }
+            }
+          }
         }
       }
     } catch (e) {
-      print('Error sending location update: $e');
+      print('Error fetching initial locations: $e');
+    }
+  }
+
+  // Store workspaces and userId to avoid repeated fetching
+  String? _currentUserId;
+  List<String> _workspaceIds = [];
+
+  Future<void> _initializeUserAndWorkspaces() async {
+    try {
+      final userResponse = await _apiClient.get('/users/me');
+      if (userResponse.statusCode == 200) {
+        final user = jsonDecode(userResponse.body);
+        _currentUserId = user['id'];
+        
+        final workspacesResponse = await _apiClient.get('/workspaces');
+        if (workspacesResponse.statusCode == 200) {
+          final workspaces = jsonDecode(workspacesResponse.body) as List;
+          _workspaceIds = workspaces.map((ws) => ws['id'] as String).toList();
+        }
+      }
+    } catch (e) {
+      print('Error initializing user: $e');
+    }
+  }
+
+  void _sendLocationUpdate(double lat, double long) {
+    if (_currentUserId == null) return;
+    
+    // Send location update for each workspace
+    for (var workspaceId in _workspaceIds) {
+      _socketService.socket?.emit('update_location', {
+        'userId': _currentUserId,
+        'latitude': lat,
+        'longitude': long,
+        'workspaceId': workspaceId,
+      });
     }
   }
 
