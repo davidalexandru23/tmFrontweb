@@ -29,7 +29,6 @@ class _CreateTaskPageState extends State<CreateTaskPage> {
   DateTime? _selectedDate;
   double? _selectedLatitude;
   double? _selectedLongitude;
-  bool _assignToMe = false;
   String? _currentUserId;
 
   bool _isLoading = false;
@@ -326,28 +325,6 @@ class _CreateTaskPageState extends State<CreateTaskPage> {
                      });
                    },
                    validator: null, // Optional if workspace is selected
-                ),
-              
-              // --- "Assign to Me" Checkbox ---
-              if (_selectedWorkspaceId != null && _currentUserId != null)
-                CheckboxListTile(
-                  value: _assignToMe,
-                  onChanged: (value) {
-                    setState(() {
-                      _assignToMe = value ?? false;
-                      if (_assignToMe) {
-                        _selectedAssigneeId = _currentUserId;
-                      } else {
-                        _selectedAssigneeId = null;
-                      }
-                    });
-                  },
-                  title: const Text(
-                    'Asignează-mi mie',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  activeColor: Colors.red,
-                  checkColor: Colors.white,
                 ),
               const SizedBox(height: 24),
 
