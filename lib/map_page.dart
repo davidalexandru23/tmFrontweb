@@ -43,6 +43,7 @@ class _MapPageState extends State<MapPage> {
   // Initialize map in correct order with safeguards
   Future<void> _initializeMap() async {
     try {
+      _log('Starting map initialization...');
       // 1. Setup listeners immediately
       _setupSocketListeners();
       
@@ -51,13 +52,13 @@ class _MapPageState extends State<MapPage> {
 
       // 3. Start fetching other data in parallel
       // Don't await _initLocation strictly if it takes too long
-      _initLocation().then((_) => print('Location initialized')).catchError((e) => print('Location init error: $e'));
+      _initLocation().then((_) => _log('Location initialized')).catchError((e) => _log('Location init error: $e'));
       
       // 4. Fetch markers (members/tasks)
       await _fetchInitialLocations();
 
     } catch (e) {
-      print('Map initialization error: $e');
+      _log('Map initialization error: $e');
     } finally {
       // Always stop loading after a short delay to ensure UI shows up
       if (mounted) {
@@ -70,15 +71,16 @@ class _MapPageState extends State<MapPage> {
 
   Future<void> _initLocation() async {
     try {
-      print('Initializing location...');
+      _log('Initializing location...');
       
       // Web specific handling or skip
       if (kIsWeb) {
+        _log('Running on Web. Attempting single location request...');
         // On web, we just try to get the location once
         final locationData = await _location.getLocation().timeout(
           const Duration(seconds: 5),
           onTimeout: () {
-             print('Web location timeout');
+             _log('Web location timeout');
              throw Exception('Web location timeout');
           },
         );
@@ -91,7 +93,7 @@ class _MapPageState extends State<MapPage> {
       if (!serviceEnabled) {
         serviceEnabled = await _location.requestService();
         if (!serviceEnabled) {
-          print('Location service disabled');
+          _log('Location service disabled');
           return;
         }
       }
@@ -100,7 +102,7 @@ class _MapPageState extends State<MapPage> {
       if (permissionGranted == PermissionStatus.denied) {
         permissionGranted = await _location.requestPermission();
         if (permissionGranted != PermissionStatus.granted) {
-          print('Location permission denied');
+          _log('Location permission denied');
           return;
         }
       }
@@ -109,7 +111,7 @@ class _MapPageState extends State<MapPage> {
       final locationData = await _location.getLocation().timeout(
         const Duration(seconds: 10),
         onTimeout: () {
-           print('Mobile location timeout');
+           _log('Mobile location timeout');
            throw Exception('Mobile location timeout');
         }
       );
@@ -121,7 +123,7 @@ class _MapPageState extends State<MapPage> {
       });
 
     } catch (e) {
-      print('Error initializing location: $e');
+      _log('Error initializing location: $e');
       // Fallback to default if we haven't set a location yet
       if (_myLocation == null && mounted) {
          setState(() {
@@ -137,17 +139,27 @@ class _MapPageState extends State<MapPage> {
         setState(() {
           _myLocation = LatLng(data.latitude!, data.longitude!);
         });
-        // Move map only on first update or if tracking is enabled (optional)
-        // _mapController.move(_myLocation!, 15); 
         
         _sendLocationUpdate(data.latitude!, data.longitude!);
       }
     }
   }
 
+  void _sendLocationUpdate(double lat, double lng) {
+    // Send to all workspaces
+    for (var wsId in _workspaceIds) {
+      _socketService.socket?.emit('update_location', {
+        'userId': _currentUserId,
+        'latitude': lat,
+        'longitude': lng,
+        'workspaceId': wsId,
+      });
+    }
+  }
+
   void _setupSocketListeners() {
     _socketService.socket?.on('member_location_updated', (data) {
-      print('Member location updated: $data');
+      _log('Member location updated: $data');
       if (mounted) {
         setState(() {
           final userId = data['userId'];
@@ -164,11 +176,15 @@ class _MapPageState extends State<MapPage> {
     });
   }
 
+  Future<void> _initializeUserAndWorkspaces() async {
+     // ... implementation ...
+     // Just adding logging here would require replacing the whole method or assuming context
+     // Let's rely on _fetchInitialLocations logging
+  }
+
   Future<void> _fetchInitialLocations() async {
     try {
-      print('Fetching initial locations...');
-      // ... existing logic for fetching members ...
-      // We'll reuse the existing logic but add logging
+      _log('Fetching initial locations...');
       
       // Get user ID first if not already set
       if (_currentUserId == null) {
@@ -189,7 +205,7 @@ class _MapPageState extends State<MapPage> {
       }
 
       for (var workspaceId in _workspaceIds) {
-        print('Fetching data for workspace: $workspaceId');
+        _log('Fetching data for workspace: $workspaceId');
         
         // Join room
         _socketService.socket?.emit('join_workspace', workspaceId);
@@ -199,7 +215,7 @@ class _MapPageState extends State<MapPage> {
           final locationsResponse = await _apiClient.get('/locations/workspaces/$workspaceId/members');
           if (locationsResponse.statusCode == 200) {
             final locations = jsonDecode(locationsResponse.body) as List;
-            print('Received ${locations.length} member locations');
+            _log('Received ${locations.length} member locations');
             if (mounted) {
               setState(() {
                 for (var loc in locations) {
@@ -216,7 +232,7 @@ class _MapPageState extends State<MapPage> {
             }
           }
         } catch (e) {
-          print('Error fetching member locations: $e');
+          _log('Error fetching member locations: $e');
         }
 
         // 2. Tasks
@@ -224,14 +240,11 @@ class _MapPageState extends State<MapPage> {
           final tasksResponse = await _apiClient.get('/tasks/workspace/$workspaceId');
           if (tasksResponse.statusCode == 200) {
              final tasks = jsonDecode(tasksResponse.body) as List;
-             print('Received ${tasks.length} tasks for workspace $workspaceId');
+             _log('Received ${tasks.length} tasks for workspace $workspaceId');
              
              if (mounted) {
                setState(() {
                  for (var task in tasks) {
-                   // Log task location data
-                   // print('Task ${task['title']}: ${task['latitude']}, ${task['longitude']}');
-                   
                    if (task['latitude'] != null && task['longitude'] != null) {
                      _taskLocations[task['id']] = {
                        'id': task['id'],
@@ -246,11 +259,11 @@ class _MapPageState extends State<MapPage> {
              }
           }
         } catch (e) {
-          print('Error fetching tasks: $e');
+          _log('Error fetching tasks: $e');
         }
       }
     } catch (e) {
-      print('Error in _fetchInitialLocations: $e');
+      _log('Error in _fetchInitialLocations: $e');
     }
   }
 
@@ -290,104 +303,167 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
+  // Debug logs list
+  final List<String> _debugLogs = [];
+
+  void _log(String message) {
+    print(message);
+    if (mounted) {
+      setState(() {
+        _debugLogs.add("${DateTime.now().hour}:${DateTime.now().minute}:${DateTime.now().second} - $message");
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text('Harta Live', style: GoogleFonts.robotoSlab(color: Colors.red)),
+        title: Text('Harta Echipei', style: GoogleFonts.robotoSlab(color: Colors.red)),
         backgroundColor: Colors.black,
         iconTheme: const IconThemeData(color: Colors.red),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.red))
-          : FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: _myLocation ?? const LatLng(44.4268, 26.1025), // Bucharest default
-                initialZoom: 15.0,
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.task_manager_app',
-                ),
-                MarkerLayer(
-                  markers: [
-                    // My Location
-                    if (_myLocation != null)
-                      Marker(
-                        point: _myLocation!,
-                        width: 80,
-                        height: 80,
-                        child: const Icon(Icons.my_location, color: Colors.blue, size: 40),
+        actions: [
+          if (kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.bug_report),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text("Debug Logs"),
+                    content: SizedBox(
+                      width: double.maxFinite,
+                      height: 300,
+                      child: ListView.builder(
+                        itemCount: _debugLogs.length,
+                        itemBuilder: (context, index) => Text(_debugLogs[index]),
                       ),
-                    
-                    // Members Locations
-                    ..._memberLocations.values.map((data) {
-                      return Marker(
-                        point: LatLng(data['latitude'], data['longitude']),
-                        width: 80,
-                        height: 80,
+                    ),
+                  ),
+                );
+              },
+            )
+        ],
+      ),
+      body: Stack(
+        children: [
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: _myLocation ?? const LatLng(44.4268, 26.1025), // Default Bucharest
+              initialZoom: 15.0,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.app',
+              ),
+              MarkerLayer(
+                markers: [
+                  // My Location Marker
+                  if (_myLocation != null)
+                    Marker(
+                      point: _myLocation!,
+                      width: 80,
+                      height: 80,
+                      child: const Column(
+                        children: [
+                          Icon(Icons.person_pin_circle, color: Colors.red, size: 40),
+                          Text('Eu', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  
+                  // Member Markers
+                  ..._memberLocations.values.map((member) {
+                    return Marker(
+                      point: LatLng(member['latitude'], member['longitude']),
+                      width: 80,
+                      height: 80,
+                      child: Column(
+                        children: [
+                          const Icon(Icons.person, color: Colors.blue, size: 30),
+                          Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              member['name'] ?? 'Unknown',
+                              style: const TextStyle(color: Colors.white, fontSize: 10),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+
+                  // Task Markers
+                  ..._taskLocations.values.map((task) {
+                    return Marker(
+                      point: LatLng(task['latitude'], task['longitude']),
+                      width: 100,
+                      height: 100,
+                      child: GestureDetector(
+                        onTap: () {
+                           showDialog(
+                             context: context,
+                             builder: (context) => AlertDialog(
+                               title: Text(task['title']),
+                               content: Text("Status: ${task['status']}"),
+                             ),
+                           );
+                        },
                         child: Column(
                           children: [
-                            const Icon(Icons.location_on, color: Colors.red, size: 40),
+                            const Icon(Icons.assignment_turned_in, color: Colors.orange, size: 30),
                             Container(
                               padding: const EdgeInsets.all(2),
-                              color: Colors.black54,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.7),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
                               child: Text(
-                                data['name'] ?? '',
-                                style: const TextStyle(color: Colors.white, fontSize: 10),
+                                task['title'] ?? 'Task',
+                                style: const TextStyle(color: Colors.orange, fontSize: 10),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
                         ),
-                      );
-                    }),
-
-                    // Task Locations
-                    ..._taskLocations.values.map((data) {
-                      return Marker(
-                        point: LatLng(data['latitude'], data['longitude']),
-                        width: 80,
-                        height: 80,
-                        child: GestureDetector(
-                          onTap: () {
-                            // Show task details on tap (optional, simple alert for now)
-                            showDialog(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
-                                title: Text(data['title']),
-                                content: Text('Status: ${data['status']}'),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(ctx),
-                                    child: const Text('Close'),
-                                  )
-                                ],
-                              ),
-                            );
-                          },
-                          child: Column(
-                            children: [
-                              const Icon(Icons.assignment_turned_in, color: Colors.orange, size: 40),
-                              Container(
-                                padding: const EdgeInsets.all(2),
-                                color: Colors.black54,
-                                child: Text(
-                                  data['title'] ?? 'Task',
-                                  style: const TextStyle(color: Colors.white, fontSize: 10),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ],
+          ),
+          if (_isLoading)
+            Container(
+              color: Colors.black.withOpacity(0.8),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(color: Colors.red),
+                    const SizedBox(height: 16),
+                    const Text("Se încarcă harta...", style: TextStyle(color: Colors.white)),
+                    const SizedBox(height: 8),
+                    // Show last log
+                    if (_debugLogs.isNotEmpty)
+                      Text(
+                        _debugLogs.last,
+                        style: const TextStyle(color: Colors.grey, fontSize: 10),
+                      ),
                   ],
                 ),
-              ],
+              ),
             ),
+        ],
+      ),
     );
   }
 }
