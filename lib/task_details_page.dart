@@ -64,7 +64,12 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
       final taskData = jsonDecode(taskResponse.body);
       final workspaceId = taskData['workspaceId'];
 
-      // 2. Luăm detaliile grupului (pentru a afla rolul și membrii)
+      // 2. Dacă e task personal (fără workspace), returnează date goale pentru workspace
+      if (workspaceId == null) {
+        return _TaskDetailsData(taskData, {'members': []});
+      }
+
+      // 3. Luăm detaliile grupului (pentru a afla rolul și membrii)
       final workspaceResponse = await widget.apiClient.get(
         '/workspaces/$workspaceId',
       );
@@ -75,7 +80,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
       }
       final workspaceData = jsonDecode(workspaceResponse.body);
 
-      // 3. Returnăm ambele
+      // 4. Returnăm ambele
       return _TaskDetailsData(taskData, workspaceData);
     } catch (e) {
       throw Exception('Eroare rețea: $e');

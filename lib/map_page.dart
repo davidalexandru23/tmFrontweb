@@ -31,10 +31,15 @@ class _MapPageState extends State<MapPage> {
   @override
   void initState() {
     super.initState();
-    _initializeUserAndWorkspaces();
-    _initLocation();
+    _initializeMap();
+  }
+
+  // Initialize map in correct order
+  Future<void> _initializeMap() async {
     _setupSocketListeners();
-    _fetchInitialLocations();
+    await _initializeUserAndWorkspaces();
+    await _initLocation();
+    await _fetchInitialLocations();
   }
 
   @override
