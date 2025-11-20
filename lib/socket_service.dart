@@ -24,6 +24,9 @@ class SocketService {
 
   SocketService._internal();
 
+  // Track joined rooms to re-join on reconnect
+  final Set<String> _joinedRooms = {};
+
   void initSocket() async {
     final token = await _storageService.getAccessToken();
     
@@ -35,6 +38,8 @@ class SocketService {
       .setTransports(['websocket'])
       .disableAutoConnect()
       .setExtraHeaders({'Authorization': 'Bearer $token'})
+      .enableForceNew() // Force new connection
+      .setReconnectionDelay(1000)
       .build()
     );
 
@@ -43,6 +48,12 @@ class SocketService {
     socket.onConnect((_) {
       print('Connected to socket: ${socket.id}');
       isConnected.value = true;
+      
+      // Re-join all tracked rooms
+      for (final room in _joinedRooms) {
+        print('Re-joining room: $room');
+        socket.emit('join_room', room);
+      }
     });
 
     socket.onDisconnect((_) {
@@ -62,8 +73,6 @@ class SocketService {
       _messageController.add(data);
       
       // 2. Show notification (global)
-      // Ideal: Check if we are currently in the chat with this person to avoid notification
-      // For now, we show it. The OS might handle foreground notifications gracefully.
       final senderName = data['sender']?['name'] ?? 'New Message';
       final content = data['content'] ?? 'Sent an image';
       _notificationService.showNotification(senderName, content);
@@ -79,15 +88,14 @@ class SocketService {
   }
 
   void joinRoom(String room) {
+    _joinedRooms.add(room); // Track room
+    
     if (socket.connected) {
       print('Joining room: $room');
       socket.emit('join_room', room);
     } else {
-      // Dacă nu e conectat, așteptăm conectarea
-      socket.onConnect((_) {
-        print('Joining room (delayed): $room');
-        socket.emit('join_room', room);
-      });
+      // Dacă nu e conectat, se va face join automat la onConnect datorită _joinedRooms
+      print('Queueing join room: $room');
     }
   }
 
