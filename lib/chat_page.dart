@@ -61,10 +61,10 @@ class _ChatPageState extends State<ChatPage> {
         // Verificăm dacă mesajul aparține acestei conversații
         // 1. Mesaj primit de la interlocutor
         // 2. Mesaj trimis de mine (dacă vine prin socket ca confirmare, deși îl adăugăm și local)
-        if ((senderId == widget.receiverId && receiverId == widget.currentUserId) ||
-            (senderId == widget.currentUserId && receiverId == widget.receiverId)) {
-          
-          // Evităm duplicatele dacă mesajul există deja (verificare simplă după conținut și timestamp ar fi ideal, dar momentan ne bazăm pe faptul că localMessage nu are ID de la server încă)
+        // Verificăm dacă mesajul aparține acestei conversații
+        // 1. Mesaj primit de la interlocutor
+        // 2. Ignorăm mesajele trimise de mine (le-am adăugat deja optimisitic)
+        if (senderId == widget.receiverId && receiverId == widget.currentUserId) {
           setState(() {
             _messages.add(data);
           });
