@@ -51,16 +51,14 @@ class _ChatPageState extends State<ChatPage> {
     
     _loadMessageHistory();
 
-    _socketService.onMessage((data) {
+    // Listen to message stream
+    _socketSubscription = _socketService.messageStream.listen((data) {
       if (mounted) {
         print('ChatPage received message: $data');
         // Only add if it's for this conversation
         final senderId = data['senderId'];
         final receiverId = data['receiverId'];
         
-        // Verificăm dacă mesajul aparține acestei conversații
-        // 1. Mesaj primit de la interlocutor
-        // 2. Mesaj trimis de mine (dacă vine prin socket ca confirmare, deși îl adăugăm și local)
         // Verificăm dacă mesajul aparține acestei conversații
         // 1. Mesaj primit de la interlocutor
         // 2. Ignorăm mesajele trimise de mine (le-am adăugat deja optimisitic)
@@ -84,6 +82,7 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   void dispose() {
+    _socketSubscription?.cancel();
     _socketService.isConnected.removeListener(_updateConnectionStatus);
     _messageController.dispose();
     _scrollController.dispose();

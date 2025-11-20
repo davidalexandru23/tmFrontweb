@@ -12,6 +12,10 @@ class SocketService {
   
   // NOU: Stream pentru statusul conexiunii
   final ValueNotifier<bool> isConnected = ValueNotifier<bool>(false);
+  
+  // NOU: StreamController pentru mesaje (broadcast ca să poată fi ascultat de mai mulți)
+  final StreamController<dynamic> _messageController = StreamController<dynamic>.broadcast();
+  Stream<dynamic> get messageStream => _messageController.stream;
 
   factory SocketService() {
     return _instance;
@@ -50,6 +54,20 @@ class SocketService {
       isConnected.value = false;
     });
 
+    // Global listener for messages
+    socket.on('receive_message', (data) {
+      print('Message received: $data');
+      // 1. Add to stream for UI
+      _messageController.add(data);
+      
+      // 2. Show notification (global)
+      // Ideal: Check if we are currently in the chat with this person to avoid notification
+      // For now, we show it. The OS might handle foreground notifications gracefully.
+      final senderName = data['sender']?['name'] ?? 'New Message';
+      final content = data['content'] ?? 'Sent an image';
+      _notificationService.showNotification(senderName, content);
+    });
+
     socket.on('notification', (data) {
       print('Notification received: $data');
       _notificationService.showNotification(
@@ -82,14 +100,8 @@ class SocketService {
     });
   }
 
-  void onMessage(Function(dynamic) callback) {
-    // Eliminăm listenerii vechi pentru a evita duplicatele
-    socket.off('receive_message');
-    socket.on('receive_message', (data) {
-      print('Message received: $data');
-      callback(data);
-    });
-  }
+  // Deprecated: Use messageStream instead
+  // void onMessage(Function(dynamic) callback) { ... }
 
   void onNotification(Function(dynamic) callback) {
     socket.on('notification', callback);
@@ -97,5 +109,6 @@ class SocketService {
 
   void dispose() {
     socket.dispose();
+    _messageController.close();
   }
 }
